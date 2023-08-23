@@ -7,7 +7,6 @@ How to install this code to your Pi-Star OS?
 
 https://www.bi7jta.org/wiki/index.php?title=Main_Page#Install_NextionDriver_for_Model_8.2FModel_10
 
-Discord group: https://discord.gg/NT6GKF6jUz
 
 NextionDriver (for MMDVMHost) by ON7LDS
 =======================================
