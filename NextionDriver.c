@@ -1,5 +1,5 @@
 /*
- *   Copyright (C) 2017...2021 by Lieven De Samblanx ON7LDS
+ *   Copyright (C) 2017...2020 by Lieven De Samblanx ON7LDS
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -36,41 +36,38 @@
 #include <dirent.h>
 #include <time.h>
 
+
 #include "NextionDriver.h"
 #include "basicFunctions.h"
 #include "processCommands.h"
 #include "processButtons.h"
 #include "helpers.h"
 
-const char *signame[]={"INVALID", "SIGHUP", "SIGINT", "SIGQUIT", "SIGILL", "SIGTRAP", "SIGABRT", "SIGBUS", "SIGFPE", "SIGKILL", "SIGUSR1", "SIGSEGV", "SIGUSR2", "SIGPIPE", "SIGALRM", "SIGTERM", "SIGSTKFLT", "SIGCHLD", "SIGCONT", "SIGSTOP", "SIGTSTP", "SIGTTIN", "SIGTTOU", "SIGURG", "SIGXCPU", "SIGXFSZ", "SIGVTALRM", "SIGPROF", "SIGWINCH", "SIGPOLL", "SIGPWR", "SIGSYS", NULL};
-
 char mux[100];
 char mmdvmPort[100];
 char nextionPort[100];
 char nextionDriverLink[100];
-char configFile1[200],configFile2[200];
+char configFile[200];
 char datafiledir[500];
 char groupsFile[100],usersFile[100];
-char groupsFileSrc[200],usersFileSrc[200];
 int verbose, screenLayout;
-char OSname[100],PIname[100];
 
 int gelezen,check;
 unsigned char inhibit;
-int page,statusval,changepages,removeDim,sleepWhenInactive,showModesStatus,waitForLan,alwasSendUserData,sendUserDataMask;
+int page,statusval,changepages,removeDim,sleepWhenInactive,showModesStatus,waitForLan;
 char userDBDelimiter;
 int userDBId,userDBCall,userDBName,userDBX1,userDBX2,userDBX3;
 long sleepTimeOut;
 char ipaddr[100];
+#ifdef XTRA
 unsigned int RXfrequency,TXfrequency;
 char location[90];
-unsigned char tempInF;
+#endif
 group_t groups[MAXGROUPS];
 user_t users[MAXUSERS];
 user_call_idx_t usersCALL_IDX[MAXUSERS];
 int nmbr_groups, nmbr_users;
 
-int signal_action = 0;
 int fd1,fd2;
 int display_TXsock;
 int display_RXsock;
@@ -145,6 +142,7 @@ void sendCommand(char *cmd){
                 usleep(87*(strlen(cmd)+1));
         }
         sendTransparentData(MMDVM_DISPLAY,cmd);
+
         addLH(cmd);
     }
     if (!become_daemon)fflush(NULL);
@@ -159,6 +157,8 @@ int checkDisplay(char *model) {
     r = read (fd2,&buffer,200);
     d=0;
 
+    writelog(LOG_NOTICE,"I am checking displays");
+    
     if (strcmp(nextionPort,"modem")==0) {
         writelog(LOG_NOTICE,"I can not (yet) check or update modem connected displays");
         return -1;
@@ -210,7 +210,7 @@ int checkDisplay(char *model) {
 
 void updateDisplay(void) {
     int flashsize,filesize,ok,i,r,baudrate,blocks;
-    char model[50],text[150];
+    char model[50];
     char buffer[4096],bestand[1024];
     struct dirent *de;
     time_t tijd;
@@ -223,27 +223,17 @@ void updateDisplay(void) {
         }
 
     writelog(2,"Trying to update display ...");
-    sprintf(text, "msg1.txt=\"Trying to update display ...\"");
-    sendCommand(text);
     flashsize=checkDisplay(model);
     strcat(model,".tft");
-    if (flashsize==0) {
-        sprintf(text, "msg.txt=\"Could not communicate with display.\"");
-        sendCommand(text);
-        writelog(LOG_ERR,"Could not communicate with display. Cannot update ..."); return; 
-    }
-    if (flashsize<0) {
-        sprintf(text, "msg.txt=\"Cannot update modem connected displays.\"");
-        sendCommand(text);
-        writelog(LOG_ERR,"Cannot update modem connected displays ..."); return; 
-    }
+    if (flashsize==0) 
+        { writelog(LOG_ERR,"Could not communicate with display. Cannot update ..."); return; }
+    if (flashsize<0) 
+        { writelog(LOG_ERR,"Cannot update modem connected displays ..."); return; }
     //search model file
     ok=0;
     DIR *dr = opendir(datafiledir);
     if (dr == NULL)  // opendir returns NULL if couldn't open directory 
     {
-        sprintf(text, "msg.txt=\"Could not open DataFilesPath directory.\"");
-        sendCommand(text);
         writelog(LOG_ERR,"Could not open DataFilesPath directory" );
         return;
     }
@@ -254,39 +244,21 @@ void updateDisplay(void) {
             ok=1;
         }
     closedir(dr);
-    if (ok==0) {
-        sprintf(text, "msg.txt=\"Could not find display update file (%s).\"",model);
-        sendCommand(text);
-        writelog(LOG_ERR,"Could not find display update file (%s)",model ); 
-        return;
-        }
+    if (ok==0) 
+        { writelog(LOG_ERR,"Could not find display update file (%s)",model ); return; }
     sprintf(bestand,"%s/%s",datafiledir,model);
     ptr = fopen(bestand,"rb");
-    if (ptr==NULL) {
-        sprintf(text, "msg.txt=\"Could not open file %s\"",model);
-        sendCommand(text);
-        writelog(LOG_ERR,"Could not open file %s",model); 
-        return; 
-    }
+    if (ptr==NULL) 
+        { writelog(LOG_ERR,"Could not open file %s",model); return; }
     //file size ? 
     fseek(ptr, 0L, SEEK_END);
     filesize = ftell(ptr);
-    if (filesize<1) {
-        sprintf(text, "msg.txt=\"Unable to get TFT file size\"");
-        sendCommand(text);
-        writelog(LOG_ERR,"Unable to get TFT file size"); 
-        return;
-    }
+    if (filesize<1) 
+        { writelog(LOG_ERR,"Unable to get TFT file size"); return; }
     //not to big for display flash ?
-    if (filesize>flashsize) {
-        sprintf(text, "msg.txt=\"TFT file to big for flash\"");
-        sendCommand(text);
-        writelog(LOG_ERR,"TFT file to big for flash");
-        return;
-    }
+    if (filesize>flashsize)
+        { writelog(LOG_ERR,"TFT file to big for flash"); return; }
     blocks=filesize/4096;
-    sprintf(text, "msg1.txt=\"I will write %d blocks\"",blocks);
-    sendCommand(text);
     writelog(LOG_DEBUG,"I will write %d blocks",blocks);
     //start update
     //https://www.itead.cc/blog/nextion-hmi-upload-protocol
@@ -326,8 +298,8 @@ void updateDisplay(void) {
 
 
 void handleButton(int received) {
-    char code, text[150],info[100], *cmd;
-    int response,resNmbr, ok;
+    char code, text[150], *cmd;
+    int response,resNmbr;
     FILE *ls;
 
     response=0;
@@ -342,8 +314,7 @@ void handleButton(int received) {
             writelog(LOG_DEBUG,text);
         }
         if (RXbuffer[0]==42) {
-            if (received==3) writelog(LOG_NOTICE,"Received command 0x%02X/%d",RXbuffer[1],RXbuffer[2]);
-                else writelog(LOG_NOTICE,"Received command 0x%02X",RXbuffer[1]);
+            writelog(LOG_NOTICE,"Received command 0x%02X",RXbuffer[1]);
             if (RXbuffer[1]>0xEF) {
                 if ((RXbuffer[1]==0xFE)&&(received==3)){
                     sendScreenData(RXbuffer[2]);
@@ -372,41 +343,7 @@ void handleButton(int received) {
                     response=RXbuffer[1];
                 } else
                 if (RXbuffer[1]==0xFB){
-                    if (received==2) updateDisplay(); // else writelog(LOG_NOTICE," index %d",RXbuffer[2]);
-                    if (received==3) {
-                        if (RXbuffer[2]==1) { writelog(LOG_NOTICE,"Updating users/Groups ..."); updateDB(86400); }
-                        if (RXbuffer[2]==2) { updateDB(0); }
-                        if (RXbuffer[2]==3) {   writelog(LOG_NOTICE,"Updating System ..."); 
-                                                sprintf(text, "msg.txt=\"Not yet implemented\""); sendCommand(text);
-                                                sprintf(text, "msg1.txt=\"Not yet implemented\""); sendCommand(text);
-                                                writelog(LOG_NOTICE,"Not yet implemented"); }
-                        if (RXbuffer[2]==4) {   writelog(LOG_NOTICE,"Sending OS info");
-                                                sprintf(text, "msg1.txt=\"%s\"",OSname); sendCommand(text);
-                                                sprintf(text, "msg2.txt=\"%s\"",PIname); sendCommand(text);
-                                            }
-                        if (RXbuffer[2]==5) {   writelog(LOG_NOTICE,"Sending HW info");
-                                                ok=getHWinfo(info);
-                                                if (ok==0) {
-                                                    sprintf(text, "msg1.txt=\"%s\"",info);
-                                                    writelog(LOG_NOTICE,"Hardware info: %s",info);
-                                                } else {
-                                                    sprintf(text, "msg1.txt=\"no info (%d)\"",ok);
-                                                    writelog(LOG_NOTICE,"Hardware info: none found (%d).",ok);
-                                                }
-                                                sendCommand(text);
-
-                                                ok=getMeminfo(info);
-                                                if (ok==0) {
-                                                    sprintf(text, "msg2.txt=\"Total Memory %s\"",info);
-                                                    writelog(LOG_NOTICE,"Memory info: %s",info);
-                                                } else {
-                                                    sprintf(text, "msg2.txt=\"no info (%d)\"",ok);
-                                                    writelog(LOG_NOTICE,"Memory info: none found (%d).",ok);
-                                                }
-                                                sendCommand(text);
-                        }
-                        if (RXbuffer[2]==6) { writelog(LOG_NOTICE,"Updating Display ..."); updateDisplay(); }
-                    }
+                    updateDisplay();
                 } else
                 if (RXbuffer[1]==0xF2){
                     dumpLHlist();
@@ -416,17 +353,15 @@ void handleButton(int received) {
                         resNmbr=RXbuffer[2];
                         if (resNmbr<32) {
                             cmd++;
-                            writelog(LOG_DEBUG," Command return field will be %d",resNmbr);
+                            writelog(LOG_DEBUG," Command retunr field will be %d",resNmbr);
                         }
                         writelog(LOG_NOTICE," Execute command \"%s\"",cmd);
                         sprintf(TXbuffer, "msg.txt=\"Execute %s\"", cmd);
                         sendCommand(TXbuffer);
                         if (RXbuffer[1]==0xF1) {
-                            strcat(cmd," 2>&1");
                             ls = popen(cmd, "r");
                             char buf[256];
                             if (fgets(buf, sizeof(buf), ls) != 0) {
-                                buf[sizeof(buf)-1]=0;
                                 strtok(buf, "\n");
                                 writelog(LOG_NOTICE," Command response \"%s\"",buf);
                                 if (resNmbr>=32) {
@@ -689,6 +624,8 @@ static void go_daemon() {
 
 static void terminate(int sig)
 {
+    char *signame[]={"INVALID", "SIGHUP", "SIGINT", "SIGQUIT", "SIGILL", "SIGTRAP", "SIGABRT", "SIGBUS", "SIGFPE", "SIGKILL", "SIGUSR1", "SIGSEGV", "SIGUSR2", "SIGPIPE", "SIGALRM", "SIGTERM", "SIGSTKFLT", "SIGCHLD", "SIGCONT", "SIGSTOP", "SIGTSTP", "SIGTTIN", "SIGTTOU", "SIGURG", "SIGXCPU", "SIGXFSZ", "SIGVTALRM", "SIGPROF", "SIGWINCH", "SIGPOLL", "SIGPWR", "SIGSYS", NULL};
+
     inhibit=0;
     sendCommand("sleep=0");
     sendCommand("ussp=0");
@@ -720,54 +657,58 @@ int openTransparentDataPorts(void) {
 }
 
 
-static void signal_action_proc(int sig)
-{
-    writelog(0, "Got signal %s",signame[sig]);
-    signal_action = sig;
-}
-
 
 int main(int argc, char *argv[])
 {
     int t,ok,wait;
-    sigset_t blockset;
 
     display_addr=0;
     check=0;
     gelezen=0;
+    screenLayout=2;
     inhibit=0;
 
-    initConfig();
+    userDBDelimiter=',';
+    userDBId=0;
+    userDBCall=1;
+    userDBName=2;
+    userDBX1=3;
+    userDBX2=4;
+    userDBX3=6;
 
     become_daemon=TRUE;
     ignore_other=FALSE;
     ok=0;
-    verbose=2;
+    verbose=0;
+
 
     signal(SIGPIPE, SIG_IGN);
+    signal(SIGCHLD, SIG_IGN);
     // terminate on these signals
     signal(SIGINT, terminate);            // 'Ctrl-C'
     signal(SIGQUIT, terminate);           // 'Ctrl-\'
     signal(SIGHUP, terminate);
     signal(SIGTERM, terminate);
-    signal(SIGUSR1, signal_action_proc);
-    signal(SIGUSR2, signal_action_proc);
+    signal(SIGUSR1, terminate);
+    signal(SIGUSR2, terminate);
 
-    sigemptyset(&blockset);
-    sigaddset(&blockset,SIGUSR1);
-    sigaddset(&blockset,SIGUSR2);
+    strcpy(nextionDriverLink,NEXTIONDRIVERLINK);
+    strcpy(nextionPort,NEXTIONPORT);
+    strcpy(configFile,CONFIGFILE);
+    strcpy(groupsFile,GROUPSFILE);
+    strcpy(usersFile,USERSFILE);
 
     datafiledir[0]=0;
     for (t=1;t<8;t++)DisplayInfo[t][0]=0;
 
-    while ((t = getopt(argc, argv, "dVvm:n:c:C:f:hi")) != -1) {
+    while ((t = getopt(argc, argv, "dVvm:n:c:f:hi")) != -1) {
         switch (t) {
             case 'd':
                 become_daemon = FALSE;
                 break;
             case 'V':
                 printf("\nNextionDriver version %s\n", NextionDriver_VERSION);
-                printf("Copyright (C) 2017...2021 ON7LDS. All rights reserved.\n\n");
+                printf("Copyright (C) 2017...2019 ON7LDS. All rights reserved.\n\n");
                 return 0;
                 break;
             case 'v':
@@ -782,10 +723,7 @@ int main(int argc, char *argv[])
                 ok++;
                 break;
             case 'c':
-                strncpy(configFile1,optarg,sizeof(configFile1)-2);
-                break;
-            case 'C':
-                strncpy(configFile2,optarg,sizeof(configFile2)-2);
+                strncpy(configFile,optarg,sizeof(configFile)-2);
                 break;
             case 'f':
                 strncpy(datafiledir,optarg,sizeof(datafiledir)-2);
@@ -796,10 +734,9 @@ int main(int argc, char *argv[])
             case 'h':
             case ':':
                 printf("\nNextionDriver version %s\n", NextionDriver_VERSION);
-                printf("Copyright (C) 2017...2021 ON7LDS. All rights reserved.\n");
+                printf("Copyright (C) 2017...2019 ON7LDS. All rights reserved.\n");
                 printf("\nUsage: %s -c <MMDVM config file> [-f] [-d] [-h]\n\n", argv[0]);
-                printf("  -c\tspecify the MMDVM config file, which might be extended with the NetxtionDriver config\n");
-                printf("  -C\tspecify a second config file, which might have the NetxtionDriver config\n");
+                printf("  -c\tspecify the MMDVM config file, which has to be extended with the NetxtionDriver config\n");
                 printf("  -f\tspecify the directory with data files (groups, users)\n");
                 printf("  -d\tstart in debug mode (do not go to backgroud and print communication data)\n");
                 printf("  -i\tignore other instances and run anyway\n");
@@ -810,6 +747,7 @@ int main(int argc, char *argv[])
                 printf(" All settings in the configuration file take priority over the options on the commandline.\n\n\n");
                 exit(EXIT_SUCCESS);
                 break;
+
         }
     }
 
@@ -818,7 +756,7 @@ int main(int argc, char *argv[])
     } else printf("Starting in console mode...\n");
 
     writelog(2,"NextionDriver version %s", NextionDriver_VERSION);
-    writelog(2,"Copyright (C) 2017...2021 ON7LDS. All rights reserved.");
+    writelog(2,"Copyright (C) 2017...2019 ON7LDS. All rights reserved.");
 
     writelog(2,"Starting with verbose level %d", verbose);
 
@@ -832,33 +770,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    t=verbose;
-    ok=readConfig(1);
-    if (ok<0) { 
-        writelog(LOG_ERR, "Couldn't open the MMDVM config file (%s)", configFile1);
-        exit(EXIT_FAILURE); 
-    }
-    ok+=readConfig(2);
-    if (ok<0) { 
-        writelog(LOG_ERR, "Couldn't open the NextionDriver config file (%s)", configFile2); 
-        exit(EXIT_FAILURE);
-    }
-//    writelog(LOG_NOTICE, "Found %d options for me",ok);
-    if (ok<11) { 
-        writelog(LOG_WARNING, "WARNING There seem to be very few options for me in the configuration file(s). I hope that is what you want."); 
-    }
-    if (strlen(nextionPort)==0) { 
-        writelog(LOG_ERR,"Configuration file(s) not correct/complete (is there a NextionDriver section ?)."); 
-        exit(EXIT_FAILURE); 
-    };
-    if (become_daemon == FALSE) verbose=t;
-
+    if (!readConfig()) { writelog(LOG_ERR,"MMDVM Config not found. Exiting."); exit(EXIT_FAILURE); };
     writelog(2,"Using verbose level %d", verbose);
-
-    strcpy(OSname,"OS unknown"); readVersions("/etc/os-release");
-    writelog(2,"Running on %s",OSname);
-    readVersions("/etc/pistar-release");
-    if (strlen(PIname)>1) writelog(2,"Pi-Star v %s",PIname); else { strcpy(PIname,"Not Pi-Star"); writelog(2,"%s",PIname); }
 
     //Open port ASAP to prevent issues on slow boards (like Pi Zero) -- thanks to KE7FNS
     writelog(2,"Opening ports");
@@ -897,7 +810,6 @@ int main(int argc, char *argv[])
     }
     writelog(4,"Data files directory: %s", datafiledir);
 
-    updateDB(3000000);
     readGroups();
     readUserDB();
 
@@ -910,6 +822,7 @@ int main(int argc, char *argv[])
 
 
     t=0; wait=0; int r=0;
+    #define SERBUFSIZE 1024
     char buffer[SERBUFSIZE*2];
     char* s;
     int start=0, transparentIsOpen=0;
@@ -934,7 +847,6 @@ int main(int argc, char *argv[])
     sprintf(TXbuffer,"ussp=%d",sleepWhenInactive);
     sendCommand(TXbuffer);
     sendCommand("thup=1");
-
 
     start=0;
     netIsActive[0]=0;
@@ -996,12 +908,6 @@ int main(int argc, char *argv[])
         }
         if ((start==0)||(wait++>1000)) { wait=0; memset(buffer,0,SERBUFSIZE*2); TXbuffer[0]=0; talkToNextion(); }
 //        usleep(1000);
-
-        sigprocmask(SIG_UNBLOCK, &blockset, NULL);
-        if (signal_action == SIGUSR1) { readUsersGroups(); signal_action = 0; }
-        if (signal_action == SIGUSR2) { print_users(); print_groups(); signal_action = 0; }
-        sigprocmask(SIG_BLOCK, &blockset, NULL);
-
     }
     close(fd1);
     close(fd2);

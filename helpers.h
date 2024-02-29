@@ -1,5 +1,5 @@
 /*
- *   Copyright (C) 2017...2021 by Lieven De Samblanx ON7LDS
+ *   Copyright (C) 2017...2020 by Lieven De Samblanx ON7LDS
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -42,25 +42,18 @@
 void getNetworkInterface(char* info);
 int getInternetStatus(int);
 pid_t proc_find(const char* name);
-void initConfig(void);
-int readConfig(int);
+int readConfig(void);
 void addLH(char*);
 void sendScreenData(unsigned int);
 void LHlist(int,int);
 void dumpLHlist(void);
 void readGroups(void);
 void readUserDB(void);
-void updateDB(int age);
-void readUsersGroups(void);
-void print_groups(void);
 void print_users(void);
 void print_call_id(void);
-void readVersions(char *filename);
 int getDiskFree(int log);
-int getHWinfo(char* info);
-int getMeminfo(char* info);
-int openTalkingSocket(void);
-int openListeningSocket(void);
+int openTalkingSocket(void); 
+int openListeningSocket(void); 
 int sendTransparentData(int display, char* msg);
 
 int search_group(int nr, group_t a[], int m, int n);

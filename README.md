@@ -1,32 +1,8 @@
-Modified by BI7JTA
-=======================================
-
-Add by @BI7JTA
-
-How to install this code to your Pi-Star OS?
-
-https://www.bi7jta.org/wiki/index.php?title=Main_Page#Install_NextionDriver_for_Model_8.2FModel_10
-
-
 NextionDriver (for MMDVMHost) by ON7LDS
 =======================================
 
 Find the last version on https://github.com/on7lds/
 
-```
-Latest version : 1.21 (aug 2021)
-* split contfiguration files :  
-  it is possible (but not manadtory) to move all [NextionDriver] settings  
-  to a separate configuration file (use the -C option for this new file)  
-* minor corrections
-
-TAKE NOTE:  
-  the default filename or the users file (DMRidFile)  
-  is changed from stripped.csv to users.csv as of V1.20!
-```
-
-  
-  
 The purpose of this program is to provide additional control for
 Nextion display layouts other than the MMDVMHost supplied layouts.
 It does this by sitting between MMDVMHost and the Nextion Display.
@@ -51,7 +27,7 @@ This program also checks the network interface regularly, and it will
 show the most recent IP address, so you can check if the IP address
 changed.
 
-When the files 'groups.txt' and 'users.csv' are present, usernames
+When the files 'groups.txt' and 'stripped.csv' are present, usernames
 and talkgroup names will be looked up and sent to the display. 
 NOTE : both files have to be sorted in ascending ID order ! 
 
@@ -85,6 +61,6 @@ to MMDVMHost for this to work!
 - [Modem connected displays](README-modemdisplays.md "Modem connected displays")
 - [Autostart NextionDriver](README-starting.md "Autostart NextionDriver")
 - [Configuration file options](README-options.md "Configuration file options")
-- [Sending commands from display to host](README-commands.md "Sending commands from display to host")
+- [Sendig commands from display to host](README-commands.md "Sendig commands from display to host")
 - [Change the program by coding yourself](README-coding.md "Change the program by coding yourself")
 

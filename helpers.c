@@ -1,5 +1,5 @@
 /*
- *   Copyright (C) 2017...2021 by Lieven De Samblanx ON7LDS
+ *   Copyright (C) 2017,2018 by Lieven De Samblanx ON7LDS
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -18,7 +18,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <limits.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -32,7 +31,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <time.h>
-#include <sys/stat.h>
 
 #include "NextionDriver.h"
 #include "helpers.h"
@@ -159,8 +157,7 @@ void sanitize(char *line) {
     indexN=0;
 
     while (line[index]) {
-        if ((line[index]!='\'')&&(line[index]!='"')&&(line[index]!=0x0D)&&(line[index]!=0x0A)
-            &&(!((line[index]==' ')&&(line[index+1]=='=')))&&(!((index>1)&&(line[index]==' ')&&(line[index-1]=='='))) ) {
+        if ((line[index]!='\'')&&(line[index]!='"')&&(line[index]!=0x0D)&&(line[index]!=0x0A)) {
             new[indexN++]=line[index];
         }
         index++;
@@ -173,32 +170,20 @@ void sanitize(char *line) {
 
 
 
-void initConfig(void) {
-    int i;
 
-    strcpy(nextionDriverLink,NEXTIONDRIVERLINK);
-    strcpy(nextionPort,NEXTIONPORT);
-    strcpy(configFile1,CONFIGFILE);
-    strcpy(configFile2,"");
-    strcpy(groupsFile,GROUPSFILE);
-    strcpy(usersFile,USERSFILE);
-    strcpy(groupsFileSrc,GROUPSFILESRC);
-    strcpy(usersFileSrc,USERSFILESRC);
+int readConfig(void) {
+    #define BUFFER_SIZE 200
+    int i,found,ok;
 
-    screenLayout=2;
+    ok=0;
+    found=0;
 
-    userDBDelimiter=',';
-    userDBId=0;
-    userDBCall=1;
-    userDBName=34;  // fields 2 and 3
-    userDBX1=4;
-    userDBX2=5;
-    userDBX3=6;
 
+#ifdef XTRA
     RXfrequency=0;
     TXfrequency=0;
     location[0]=0;
-    tempInF=0;
+#endif
 
     for(i=0; i<14; i++) modeIsEnabled[i]=0;
     remotePort[0]=0;
@@ -210,36 +195,19 @@ void initConfig(void) {
     usersFile[0]=0;
     changepages=0;
 
+
     for (i=0; i<7; i++) modeIsEnabled[i]=0;
-}
-
-
-
-int readConfig(int filenr) {
-    #define BUFFER_SIZE 200
-    int found,ok;
-    char configFile[200];
-
-    ok=0;
-    found=0;
-
-    strcpy(configFile,"");
-    if (filenr==1) strcpy(configFile,configFile1);
-    if (filenr==2) strcpy(configFile,configFile2);
-
-    if (strlen(configFile)==0) return 1;
-    writelog(LOG_NOTICE,"Reading configuration file %s",configFile);
 
     FILE* fp = fopen(configFile, "rt");
     if (fp == NULL) {
-        return -100-filenr;
+        writelog(LOG_ERR, "Couldn't open the MMDVM config file - %s\n", configFile);
+        return 0;
     }
 
     changepages=0;
     removeDim=0;
     sleepWhenInactive=60;
     waitForLan=1;
-    sendUserDataMask=0b00000010;
 
     char buffer[BUFFER_SIZE];
     while (fgets(buffer, BUFFER_SIZE, fp) != NULL) {
@@ -251,21 +219,21 @@ int readConfig(int filenr) {
         }
         if (buffer[0] == '[') {
             ok=0;
-            if (strncmp(buffer, "[D-Star]", 8) == 0)             ok=C_DSTAR;
-            if (strncmp(buffer, "[DMR]", 5) == 0)                ok=C_DMR;
+            if (strncmp(buffer, "[D-Star]", 8) == 0)         ok=C_DSTAR;
+            if (strncmp(buffer, "[DMR]", 5) == 0)         ok=C_DMR;
             if (strncmp(buffer, "[System Fusion]", 15) == 0)     ok=C_YSF;
-            if (strncmp(buffer, "[P25]", 5) == 0)                ok=C_P25;
-            if (strncmp(buffer, "[NXDN]", 6) == 0)               ok=C_NXDN;
-            if (strncmp(buffer, "[POCSAG]", 6) == 0)             ok=C_POCSAG;
-            if (strncmp(buffer, "[D-Star Network]", 16) == 0)    ok=C_DSTARNET;
-            if (strncmp(buffer, "[DMR Network]", 13) == 0)       ok=C_DMRNET;
+            if (strncmp(buffer, "[P25]", 5) == 0)         ok=C_P25;
+            if (strncmp(buffer, "[NXDN]", 6) == 0)         ok=C_NXDN;
+            if (strncmp(buffer, "[POCSAG]", 6) == 0)         ok=C_POCSAG;
+            if (strncmp(buffer, "[D-Star Network]", 16) == 0)     ok=C_DSTARNET;
+            if (strncmp(buffer, "[DMR Network]", 13) == 0)     ok=C_DMRNET;
             if (strncmp(buffer, "[System Fusion Network]", 23) == 0) ok=C_YSFNET;
-            if (strncmp(buffer, "[P25 Network]", 13) == 0)       ok=C_P25NET;
-            if (strncmp(buffer, "[NXDN Network]", 14) == 0)      ok=C_NXDNNET;
-            if (strncmp(buffer, "[Info]", 6) == 0)               ok=C_INFO;
-            if (strncmp(buffer, "[Nextion]", 9) == 0)            ok=C_NEXTION;
-            if (strncmp(buffer, "[Log]", 5) == 0)                ok=C_LOG;
-            if (strncmp(buffer, "[Transparent Data]", 18) == 0)  ok=C_TRANSPARENT;
+            if (strncmp(buffer, "[P25 Network]", 13) == 0)     ok=C_P25NET;
+            if (strncmp(buffer, "[NXDN Network]", 14) == 0)     ok=C_NXDNNET;
+            if (strncmp(buffer, "[Info]", 6) == 0)         ok=C_INFO;
+            if (strncmp(buffer, "[Nextion]", 9) == 0)         ok=C_NEXTION;
+            if (strncmp(buffer, "[Log]", 5) == 0)         ok=C_LOG;
+            if (strncmp(buffer, "[Transparent Data]", 18) == 0) ok=C_TRANSPARENT;
             if (strncmp(buffer, "[NextionDriver]", 15) == 0)     ok=C_NEXTIONDRIVER;
         }
         char* key   = strtok(buffer, " \t=\r\n");
@@ -284,6 +252,7 @@ int readConfig(int filenr) {
             }
         }
 
+#ifdef XTRA
         if (ok==C_INFO) {
             if (strcmp(key, "RXFrequency") == 0) {
                 RXfrequency = (unsigned int)atoi(value);
@@ -302,6 +271,7 @@ int readConfig(int filenr) {
                 found++;
             }
         }
+#endif
         if (ok==C_NEXTION) {
             if (strcmp(key, "Port") == 0) {
                 strcpy(nextionDriverLink,value);
@@ -310,11 +280,6 @@ int readConfig(int filenr) {
             }
             if (strcmp(key, "ScreenLayout") == 0) {
                 screenLayout = (unsigned int)atoi(value);
-                found++;
-            }
-            if (strcmp(key, "DisplayTempInFahrenheit") == 0) {
-                tempInF = (unsigned int)atoi(value);
-                writelog(LOG_NOTICE,"Showing temperature in %s", (tempInF==0) ? "Celsius" : "Farenheit" );
                 found++;
             }
         }
@@ -362,29 +327,14 @@ int readConfig(int filenr) {
             }
             if (strcmp(key, "DataFilesPath") == 0) {
                 strcpy(datafiledir,value);
-                if (datafiledir[strlen(datafiledir)-1]!='/') {
-                    strcat(datafiledir,"/");
-                }
                 found++;
             }
             if (strcmp(key, "GroupsFile") == 0) {
                 strcpy(groupsFile,value);
                 found++;
             }
-            if (strcmp(key, "GroupsFileSrc") == 0) {
-                strncpy(groupsFileSrc,value,sizeof(groupsFileSrc)-1);
-                groupsFileSrc[sizeof(groupsFileSrc)-1]=0;
-                writelog(LOG_NOTICE,"Groups file will be fetched from [%s]",groupsFileSrc);
-                found++;
-            }
             if (strcmp(key, "DMRidFile") == 0) {
                 strcpy(usersFile,value);
-                found++;
-            }
-            if (strcmp(key, "DMRidFileSrc") == 0) {
-                strncpy(usersFileSrc,value,sizeof(usersFileSrc)-1);
-                usersFileSrc[sizeof(usersFileSrc)-1]=0;
-                writelog(LOG_NOTICE,"Users file will be fetched from [%s]",usersFileSrc);
                 found++;
             }
             //----- Users -----
@@ -405,20 +355,20 @@ int readConfig(int filenr) {
                 found++;
             }
             if (strcmp(key, "DMRidName") == 0) {
-                if (value[1]==',') { value[1]=value[2]; value[2]=0; }
                 userDBName=(unsigned int)atoi(value);
-                if ((userDBName<1)||(userDBName>99))userDBName=34;
+                if ((userDBName<1)||(userDBName>10))userDBName=3;
+                userDBName--;
                 found++;
             }
             if (strcmp(key, "DMRidX1") == 0) {
                 userDBX1=(unsigned int)atoi(value);
-                if ((userDBX1<1)||(userDBX1>10))userDBX1=5;
+                if ((userDBX1<1)||(userDBX1>10))userDBX1=4;
                 userDBX1--;
                 found++;
             }
             if (strcmp(key, "DMRidX2") == 0) {
                 userDBX2=(unsigned int)atoi(value);
-                if ((userDBX2<1)||(userDBX2>10))userDBX2=6;
+                if ((userDBX2<1)||(userDBX2>10))userDBX2=5;
                 userDBX2--;
                 found++;
             }
@@ -431,34 +381,22 @@ int readConfig(int filenr) {
             //----- ----- -----
             if (strcmp(key, "ChangePagesMode") == 0) {
                 changepages = (unsigned int)atoi(value);
-                writelog(LOG_NOTICE,"ChangePagesMode: %s", changepages ? "ON" : "OFF");
                 found++;
             }
             if (strcmp(key, "RemoveDim") == 0) {
                 removeDim = (unsigned int)atoi(value);
-                writelog(LOG_NOTICE,"RemoveDim: %s", removeDim ? "ON" : "OFF");
                 found++;
             }
             if (strcmp(key, "SleepWhenInactive") == 0) {
                 sleepWhenInactive = (unsigned int)atoi(value);
-                writelog(LOG_NOTICE,"SleepWhenInactive: %s", sleepWhenInactive ? "ON" : "OFF");
                 found++;
             }
-
             if (strcmp(key, "ShowModesStatus") == 0) {
                 showModesStatus = (unsigned int)atoi(value);
-                writelog(LOG_NOTICE,"ShowModesStatus: %s", showModesStatus ? "ON" : "OFF");
-                found++;
-            }
-            if (strcmp(key, "SendUserDataMask") == 0) {
-                int base; if ((value[1]!=0)&&(value[1]=='b')) { base=2; value[0]=' ', value[1]=' '; } else { base=0; }
-                sendUserDataMask = (unsigned int)strtol(value, NULL, base);
-                writelog(LOG_NOTICE,"SendUserDataMask: %d %s | 0x%X", base, value, sendUserDataMask);
                 found++;
             }
             if (strcmp(key, "WaitForLan") == 0) {
                 waitForLan = (unsigned int)atoi(value);
-                writelog(LOG_NOTICE,"WaitForLan: %s", waitForLan ? "ON" : "OFF");
                 found++;
             }
         }
@@ -466,50 +404,24 @@ int readConfig(int filenr) {
     fclose(fp);
 
     if (found == 0) {
-        writelog(LOG_ERR,"Found no data in config file %s.\n", configFile);
+        writelog(LOG_ERR,"Found no data in the config file %s. Exiting.\n", configFile);
+        exit(EXIT_FAILURE);
     }
-    return found;
-}
 
-
-void readVersions(char *filename) {
-  char buffer[102], *val;
-
-//  printf("--- File  [%s]\n",filename);
-  FILE* fp = fopen(filename, "rt");
-  if (fp != NULL) {
-    while (fgets(buffer, 100, fp) != NULL) {
-        sanitize(buffer);
-        val=strstr(buffer,"=");
-        if (val==NULL) continue;
-        val[0]=0; val++;
-//        printf("Key [%s]\n",buffer);
-//        printf("Val [%s]\n\n",val);
-        if (strcmp(buffer,"PRETTY_NAME")==0) { strcpy(OSname,val); }
-        if (strcmp(buffer,"Version")==0)     { strcpy(PIname,val); }
-    }
-    fclose(fp);
-  }
+    return 1;
 }
 
 
 int getDiskFree(int log){
   struct statfs sStats;
   char fname[250];
-  int ok;
 
   strcpy(fname,datafiledir);
   strcat(fname,groupsFile);
 
-  ok = statfs( fname, &sStats );
-  if (ok==-1) {
-    writelog(LOG_ERR,"No groups file found (%s), trying config file to calculate disk size",fname);
-    ok = statfs( configFile1 , &sStats );
-  }
-
-  if( ok == -1 ) {
-      writelog(LOG_ERR,"Unable to find any file to calculate disk size");
-      return -1;
+  if( statfs( fname, &sStats ) == -1 ) {
+        writelog(LOG_ERR,"No groups file found, unable to calculate disk size\n");
+    return -1;
   } else {
     int size,free;
     //sizes in MB;
@@ -523,58 +435,6 @@ int getDiskFree(int log){
   }
 }
 
-
-int getHWinfo(char* info) {
-    size_t n = 0;
-    char *line = NULL;
-
-    strcpy(info,"");
-    FILE *fp = fopen("/proc/cpuinfo", "r");
-    if (fp==NULL) return ENOENT;
-
-    while (getline(&line, &n, fp) > 0) {
-            if (strstr(line, "model name")) { sprintf(info,"%s",line); }
-            if (strstr(line, "Model")) { sprintf(info,"%s",line); }
-    }
-    char *token;
-    const char s[3] = ":\n";
-    token = strtok(info, s);
-    if ( token != NULL ) {
-      token = strtok(NULL, s);
-    }
-    sprintf(info, "%s", token+1 );
-    free(line);
-    fclose(fp);
-    return 0;
-}
-
-int getMeminfo(char* info) {
-    size_t n = 0;
-    char *line = NULL;
-    int i;
-
-    strcpy(info,"");
-    FILE *fp = fopen("/proc/meminfo", "r");
-    if (fp==NULL) return ENOENT;
-
-    while (getline(&line, &n, fp) > 0) {
-            if (strstr(line, "MemTotal")) { sprintf(info,"%s",line); }
-    }
-    char *token;
-    const char s[3] = ":\n";
-    token = strtok(info, s);
-    if ( token != NULL ) {
-      token = strtok(NULL, s);
-    }
-    for(i=0; i<20; i++) { if (token[0]==0x20) token++; else break; }
-    sprintf(info, "%s", token );
-    free(line);
-    fclose(fp);
-    return 0;
-}
-
-
-
 #define LH_PAGES 	7
 #define LH_INDEXES 	20
 #define LH_FIELDS 	40
@@ -587,12 +447,10 @@ unsigned char LHinhibit;
 void addLH(char* displaydatabuf ) {
     int i,f,field, test1, test2;
     char* split;
-    char displaydata[1024];
+    char displaydata[1000];
 
-    if (displaydatabuf==NULL) return;
     if ((displaydatabuf[0]=='L')&&(displaydatabuf[1]=='H'))return;
     strcpy(displaydata,displaydatabuf);
-    displaydata[99]=0;
     writelog(LOG_DEBUG,"  LH: check [%s] on page %d",displaydata,page);
     if ((page<0)||(page>=LH_PAGES)) { writelog(LOG_ERR,"LH: nonexistent page"); return; }
 
@@ -602,6 +460,7 @@ void addLH(char* displaydatabuf ) {
         statusval=atoi(split);
         return;
     }
+
 
     split=strstr(displaydata,".txt=");
     if (split==NULL) { return; }
@@ -647,7 +506,6 @@ void addLH(char* displaydatabuf ) {
         startdata[page]++;
 //												if (page>0)printf("-----------New index !-----------\n");
     }
-
     if (startdata[page]>=LH_INDEXES) startdata[page]=1;
     i=startdata[page];
     if ((page==0)||(test1)){ for (f=0;f<LH_FIELDS;f++) strncpy(data[page][f][i],data[page][f][0],99); strcpy(data[page][f][0],""); statusval=0; }
@@ -965,98 +823,6 @@ void readGroups(void){
 }
 
 
-void convertStoDHMS(long int age,char * DHMS) {
-    int temp;
-
-    if (age>INT_MAX) age=INT_MAX;
-    temp=age/86400;
-    sprintf(DHMS,"%d days",temp);
-    if (temp>2) return;
-    temp=age/3600;
-    sprintf(DHMS,"%d hour",temp);
-    if (temp>2) return;
-    temp=age/60;
-    sprintf(DHMS,"%d min",temp);
-    if (temp>2) return;
-    sprintf(DHMS,"%d s",temp);
-}
-
-
-
-void updateDB(int age) {
-    struct stat attr;
-    char fname[250], cmd[550],text[120],tmp[100],dt[50],unit[20];
-    int ok;
-
-    time_t nu = time(NULL);
-    tmp[0]=0;
-
-    strcpy(fname,datafiledir);
-    strcat(fname,groupsFile);
-    ok=stat(fname, &attr);
-    if (ok!=0) {
-        sprintf(tmp," No Groups file found");
-        writelog(LOG_ERR,tmp);
-    } else {
-        strftime(dt, 50, "%Y-%m-%d %H:%M:%S", localtime(&attr.st_mtime));
-        convertStoDHMS(nu-attr.st_mtime,unit);
-        sprintf(tmp," Groups file : %s (%s old)",dt,unit);
-        writelog(LOG_NOTICE,tmp);
-    }
-    if (age>0) {
-      if ((ok!=0)||(nu-attr.st_mtime>age)) {
-        sprintf(text, "msg1.txt=\"Updating ...\"");
-        sendCommand(text);
-        if (strcmp(groupsFileSrc,GROUPSFILESRC)!=0) writelog(LOG_NOTICE," Fetching groups from %s",groupsFileSrc);
-        sprintf(cmd, "wget %s -O /tmp/groups >/dev/null 2>&1 && touch /tmp/groups && mv /tmp/groups %s",groupsFileSrc,fname);
-        ok=system(cmd);
-        if (ok!=0) {
-            sprintf(text, "msg.txt=\"Groups file update failed.\"");
-            sendCommand(text);
-            sprintf(tmp," ERROR: Groups file update failed (%d)",ok);
-            writelog(LOG_ERR,tmp);
-        } else {
-            sprintf(tmp," Groups file downloaded");
-            writelog(LOG_NOTICE,tmp);
-        }
-      } else {
-        sprintf(text, "msg.txt=\"Files too young. Not updating.\"");
-        sendCommand(text);
-      }
-    }
-    sprintf(text, "msg1.txt=\"%s\"",tmp);
-    if (age<3000000) sendCommand(text);
-
-    strcpy(fname,datafiledir);
-    strcat(fname,usersFile);
-    ok=stat(fname, &attr);
-    if (ok!=0) {
-        sprintf(tmp," No Users file found");
-        writelog(LOG_ERR,tmp);
-    } else {
-        strftime(dt, 50, "%Y-%m-%d %H:%M:%S", localtime(&attr.st_mtime));
-        convertStoDHMS(nu-attr.st_mtime,unit);
-        sprintf(tmp," Users file : %s (%s old)",dt,unit);
-        writelog(LOG_NOTICE,tmp);
-    }
-    if (age>0)
-      if ((ok!=0)||(nu-attr.st_mtime>age)) {
-        if (strcmp(usersFileSrc,USERSFILESRC)!=0) writelog(LOG_NOTICE," Fetching users from %s",groupsFileSrc);
-        sprintf(cmd, "wget %s -O /tmp/users >/dev/null >/dev/null 2>&1 && touch /tmp/users && mv /tmp/users %s",usersFileSrc,fname);
-        ok=system(cmd);
-        if (ok!=0) {
-            sprintf(tmp," ERROR: Users file update failed (%d)",ok);
-            writelog(LOG_ERR,tmp);
-        } else {
-            sprintf(tmp," Users file downloaded");
-            writelog(LOG_NOTICE,tmp);
-        }
-    }
-    sprintf(text, "msg2.txt=\"%s\"",tmp);
-    if (age<3000000) sendCommand(text);
-}
-
-
 
 
 void readUserDB(void){
@@ -1065,7 +831,6 @@ void readUserDB(void){
     char delimiters[3];
     int i,nr;
     char buffer[BUFFER_SZ];
-    char username[100];
     char *key[10],*next,*bufP;
     char *niks = "";
 
@@ -1075,11 +840,7 @@ void readUserDB(void){
     writelog(LOG_NOTICE,"   delimiter '%c'",userDBDelimiter);
     writelog(LOG_NOTICE,"   DMRid in field %d",userDBId+1);
     writelog(LOG_NOTICE,"   Call  in field %d",userDBCall+1);
-    if (userDBName>10) {
-        writelog(LOG_NOTICE,"   Name  in fields %d + %d",(userDBName/10),(userDBName%10));
-    } else {
-        writelog(LOG_NOTICE,"   Name  in field %d",userDBName);
-    }
+    writelog(LOG_NOTICE,"   Name  in field %d",userDBName+1);
     writelog(LOG_NOTICE,"   Extra data in fields %d,%d and %d",userDBX1+1,userDBX2+1,userDBX3+1);
 
     sprintf(delimiters,"%c\n",userDBDelimiter);
@@ -1112,14 +873,9 @@ void readUserDB(void){
         }
         nr=atoi(key[userDBId]);
         if ( (nr>1000000)&&(nr<10000000)&&(strlen(key[userDBCall])>3) ) {
-            if (userDBName>10) { 
-                sprintf(username,"%s %s",key[(userDBName/10)-1],key[(userDBName%10)-1]); 
-            } else {
-                sprintf(username,"%s",key[userDBName-1]);
-            }
-//printf("%5d Pushing [%d] [%s] [%s] [%s] [%s]  [%s]\n",nmbr_users, nr,  key[userDBCall], username, key[userDBX1], key[userDBX2], key[userDBX3]);fflush(NULL);
-//usleep(100000);
-            if (insert_user(users, nr, key[userDBCall], username, key[userDBX1], key[userDBX2], key[userDBX3])==0) break;
+//            printf("%5d Pushing [%d] [%s] [%s] [%s] [%s]  [%s]\n",nmbr_users, nr,  key[userDBCall], key[userDBName], key[userDBX1], key[userDBX2], key[userDBX3]);fflush(NULL);
+//            usleep(100000);
+            if (insert_user(users, nr, key[userDBCall], key[userDBName], key[userDBX1], key[userDBX2], key[userDBX3])==0) break;
         }
 //            else printf("   Not inserting [%d][%s]\n",nr,key[userDBCall]);
 
@@ -1127,7 +883,7 @@ void readUserDB(void){
     fclose(fp);
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
     double result = (stop.tv_sec - start.tv_sec) * 1e3 + (stop.tv_nsec - start.tv_nsec) / 1e6;
-    writelog(LOG_NOTICE,"  Read %d users in %0.0f ms.",nmbr_users-1,result);
+    writelog(LOG_NOTICE,"  Read %d users in %0.0f ms.",nmbr_users,result);
 
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
     int userindexes[MAXUSERS];
@@ -1138,28 +894,6 @@ void readUserDB(void){
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
     result = (stop.tv_sec - start.tv_sec) * 1e3 + (stop.tv_nsec - start.tv_nsec) / 1e6;
     writelog(LOG_NOTICE,"  Sorted CALL table in %0.0f ms.",result);
-}
-
-
-void readUsersGroups(void) {
-    writelog(LOG_NOTICE,"Clearing users and groups ...");
-    int i;
-
-    for (i=nmbr_groups-1;i>=0;i--) {
-        free(groups[i].name);
-    }
-    for (i=nmbr_users-1;i>=0;i--) {
-        free(users[i].data1);
-        free(users[i].data2);
-        free(users[i].data3);
-        free(users[i].data4);
-        free(users[i].data5);
-        free(usersCALL_IDX[i].call);
-    }
-
-    writelog(LOG_NOTICE,"Re-reading users and groups ...");
-    readGroups();
-    readUserDB();
 }
 
 
@@ -1242,7 +976,7 @@ int openTalkingSocket(void) {
 
 int sendTransparentData(int display,char* msg) {
 
-    if ((transparentIsEnabled==0)||(display_TXsock<1)) return 0;
+    if (transparentIsEnabled==0) return 0;
 
     char content[100];
 
@@ -1251,8 +985,7 @@ int sendTransparentData(int display,char* msg) {
 
     writelog(LOG_DEBUG," NET: %s",msg);
 
-    strncpy(&content[1],msg,95);
-    content[95]=0;
+    strcpy(&content[1],msg);
     strcat(content,"\xff\xff\xff");
 
     if (sendto(display_TXsock,content,strlen(content),0, display_addr->ai_addr,display_addr->ai_addrlen)==-1) {

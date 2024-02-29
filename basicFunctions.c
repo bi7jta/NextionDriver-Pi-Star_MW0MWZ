@@ -1,5 +1,5 @@
 /*
- *   Copyright (C) 2017...2022 by Lieven De Samblanx ON7LDS
+ *   Copyright (C) 2017...2020 by Lieven De Samblanx ON7LDS
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -35,7 +35,6 @@
 void basicFunctions() {
 
     char text[100];
-    char *p;
 
     if (strlen(TXbuffer)==0) return;
 
@@ -107,7 +106,7 @@ void basicFunctions() {
     }
 
     // if date/time is sent, check IP interface from time to time:
-    //   and disk free in % and data files
+    //   and disk free in %
     if ((page==0)&&(strstr(TXbuffer,"t2.txt=")>0)&&(check++>100)) {
         getNetworkInterface(ipaddr);
         netIsActive[0]=getInternetStatus(check);
@@ -115,30 +114,32 @@ void basicFunctions() {
         check=0;
     }
     // check temp & CPU freq (also not too often)
-    if (page==0){
-        p=strstr(TXbuffer,"t2");
-        if (p==NULL) p=strstr(TXbuffer,"t3");
-        if ((p!=NULL)&&(p[7]==61)&&((p[2]&48)==48)) { TXbuffer[0]=0; return; }
-    }
-    if (((page==0)&&(strstr(TXbuffer,"t2.txt=")!=NULL)&&(check%8==1))||(strstr(TXbuffer,"status.val=17")!=NULL)) {
+    if ((page==0)&&(strstr(TXbuffer,"t2.txt=")>0)&&(check%8==0)) {
         FILE *deviceInfoFile;
         double val;
+//see NextionDriver.h for info about defining the XTRA condition
+#ifdef XTRA
         //CPU temperature
         deviceInfoFile = fopen ("/sys/class/thermal/thermal_zone0/temp", "r");
         if (deviceInfoFile == NULL) {
             sprintf(text, "t20.txt=\"?\"");
         } else {
             fscanf (deviceInfoFile, "%lf", &val);
-            val /= 1000;
-            if (tempInF==0) {
-                sprintf(text, "t20.txt=\"%2.2f %cC\"", val, 176);
-            } else {
-                val=(val*1.8)+32;
-                sprintf(text, "t20.txt=\"%2.1f %cF\"", val, 176);
-            }
+            writelog(LOG_NOTICE,"CPU temperature:%s", val);
+            //BPi-M2z M2z Not need div 1000
+            //val /= 1000;
+
+            sprintf(text, "t20.txt=\"%2.2f %cC\"", val, 176);
+            /*
+            If you live in one of the 5 countries (Bahamas, Belize, Cayman Islands,
+             Palau, US) where they use degrees F, you could comment the line above
+             and uncomment the following line :                                      */
+            //val=(val*1.8)+32;  sprintf(text, "t20.txt=\"%2.1f %cF\"", val, 176);
+
             fclose(deviceInfoFile);
         }
         sendCommand(text);
+#endif
 
        //CPU frequency
         deviceInfoFile = fopen ("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_cur_freq", "r");
@@ -174,22 +175,24 @@ void basicFunctions() {
             sprintf(text, "t23.txt=\"%d\"",getDiskFree(FALSE));
         sendCommand(text);
 
+#ifdef XTRA
         //RXFrequency
         double fx;
         fx=RXfrequency;
         fx/=1000000;
-        sprintf(text, "t30.txt=\"%3.6f\"",fx);
+        sprintf(text, "t30.txt=\"%3.6fMHz\"",fx);
         sendCommand(text);
 
         //TXFrequency
         fx=TXfrequency;
         fx/=1000000;
-        sprintf(text, "t32.txt=\"%3.6f\"",fx);
+        sprintf(text, "t32.txt=\"%3.6fMHz\"",fx);
         sendCommand(text);
 
         //Location
         sprintf(text, "t31.txt=\"%s\"",location);
         sendCommand(text);
+#endif
 
         //disable 25356 text 46486
         //enable  1472  text 0
@@ -294,64 +297,14 @@ void basicFunctions() {
         sendCommand(TXbuffer);
     }
 
-    const char showOn[] = {0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x00, 0x00, 0x0, 0x0, 0x0, 0x0, 0x0 };
 
-    //send user data if found (Non DMR)
-    if ((page!=2)&&(showOn[page&0x0F]&sendUserDataMask)&&(strstr(TXbuffer,"t0.txt")!=NULL)&&(TXbuffer[8]!='"')) {
+    //send user data if found (Slot 1)
+    if ((page==2)&&(strstr(TXbuffer,"t0.txt")!=NULL)&&(TXbuffer[8]!='"')) {
         int nr,user;
 
         sendCommand(TXbuffer);
 
         user=0;
-        nr=atoi(&TXbuffer[10]);
-        if (nr<1000000) nr=0;  //only real ID (not 2E0... callsigns) - thanks KE7FNS
-        if (nr>0) {
-            user=search_user_index_for_ID(nr,users,0,nmbr_users-1);
-            writelog(LOG_DEBUG,"- Found user [%s] for ID %d",users[user].data1,nr);
-            sprintf(text,"ID %d",nr);
-        } else if (strstr(TXbuffer,"Listening")==NULL) {
-            TXbuffer[strlen(TXbuffer)-1]=' ';
-            char* l=strchr(&TXbuffer[10], ' ');
-            if (l!=NULL) l[0]=0;
-            writelog(LOG_INFO,"Search for call [%s] \n",&TXbuffer[10]);
-            user=search_user_index_for_CALL(&TXbuffer[10],usersCALL_IDX,0,nmbr_users-1);
-            writelog(LOG_INFO,"- Found user [%s] for CALL %s",users[user].data1,&TXbuffer[10]);
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstringop-truncation"
-            TXbuffer[24]=0;
-            strncpy(text,&TXbuffer[10],99);
-#pragma GCC diagnostic pop
-        }
-        if (user>=0) {
-            sprintf(TXbuffer,"t18.txt=\"%s\"",users[user].data1);
-            sendCommand(TXbuffer);
-            sprintf(TXbuffer,"t19.txt=\"%s\"",users[user].data2);
-            sendCommand(TXbuffer);
-            sprintf(TXbuffer,"t20.txt=\"%s\"",users[user].data3);
-            sendCommand(TXbuffer);
-            sprintf(TXbuffer,"t21.txt=\"%s\"",users[user].data4);
-            sendCommand(TXbuffer);
-            sprintf(TXbuffer,"t22.txt=\"%s\"",users[user].data5);
-            sendCommand(TXbuffer);
-        } else {
-            sprintf(TXbuffer,"t18.txt=\"DMRID %s\"",text);
-            sendCommand(TXbuffer);
-            sprintf(TXbuffer,"t19.txt=\"Not found in\"");
-            sendCommand(TXbuffer);
-            sprintf(TXbuffer,"t20.txt=\"%s\"",usersFile);
-            sendCommand(TXbuffer);
-        }
-        sprintf(text, "MMDVM.status.val=68");
-        sendCommand(text);
-        sendCommand("click S0,1");
-    }
-    //send user data if found (DMR Slot 1)
-    if ((2&showOn[page&0x0F]&sendUserDataMask)&&(strstr(TXbuffer,"t0.txt")!=NULL)&&(TXbuffer[8]!='"')) {
-        int nr,user;
-
-        sendCommand(TXbuffer);
-
-        user=0; text[0]=0;
         nr=atoi(&TXbuffer[12]);
         if (nr<1000000) nr=0;  //only real ID (not 2E0... callsigns) - thanks KE7FNS
         if (nr>0) {
@@ -383,7 +336,7 @@ void basicFunctions() {
             sprintf(TXbuffer,"t22.txt=\"%s\"",users[user].data5);
             sendCommand(TXbuffer);
         } else {
-            sprintf(TXbuffer,"t18.txt=\"User %s\"",text);
+            sprintf(TXbuffer,"t18.txt=\"DMRID %s\"",text);
             sendCommand(TXbuffer);
             sprintf(TXbuffer,"t19.txt=\"Not found in\"");
             sendCommand(TXbuffer);
@@ -394,8 +347,8 @@ void basicFunctions() {
         sendCommand(text);
         sendCommand("click S0,1");
     }
-    //send user data if found (DMR Slot 2)
-    if ((2&showOn[page&0x0F]&sendUserDataMask)&&(strstr(TXbuffer,"t2.txt")!=NULL)&&(TXbuffer[8]!='"')) {
+    //send user data if found (Slot 2)
+    if ((page==2)&&(strstr(TXbuffer,"t2.txt")!=NULL)&&(TXbuffer[8]!='"')) {
         int nr,user;
 
         sendCommand(TXbuffer);
